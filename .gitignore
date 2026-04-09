@@ -1,0 +1,16 @@
+# Generated log pull directories and findings
+logpull-*/
+Logpull_Findings/
+logpull_findings/
+
+# Archives
+*.tgz
+*.tar.gz
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Local OS/editor noise
+.DS_Store
+*.swp
