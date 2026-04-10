@@ -52,6 +52,11 @@ CATEGORY_DISPLAY = {
     "12": ("HEALTHCHECK", "Internal health monitoring failures"),
 }
 
+CATEGORY_SUMMARY = {
+    category: description
+    for category, description in CATEGORY_DISPLAY.values()
+}
+
 PATTERNS = {
     "WIFI_CLIENT": r"CTRL-EVENT-(DISCONNECTED|SSID-TEMP-DISABLED|ASSOC-REJECT|AUTH-REJECT)|deauth(entication)?|disassoc(iation|iated)?|not associated|association rejected|auth(entication)? rejected|roam(ing)? failed|beacon loss|sa query timeout|pmksa.*fail|pmkid.*mismatch|eapol.*(timeout|failed)|osw_sta_cqm: assoc: .*troubled changed: from=no to=yes: low_(rx_mbps|snr)|osw_sta_cqm: assoc: .*troubled=yes: low_(rx_mbps|snr)|osw_sta_cqm: assoc: .*troubled changed: from=yes: low_(rx_mbps|snr) to=no|client.*(disconnect(ed)?|deauth(entication)?|disassoc(iation|iated)?|auth(entication)? failed|assoc(iation)? failed|roam(ing)? failed)|sta.*(disconnect(ed)?|deauth(entication)?|disassoc(iation|iated)?|auth(entication)? failed|assoc(iation)? failed|roam(ing)? failed)|station.*(disconnect(ed)?|deauth(entication)?|disassoc(iation|iated)?|auth(entication)? failed|assoc(iation)? failed|roam(ing)? failed)|supplicant.*(disconnect(ed)?|deauth(entication)?|disassoc(iation|iated)?|auth(entication)? failed|assoc(iation)? failed|roam(ing)? failed)",
     "BACKHAUL": r"disconnect|disconnected",
@@ -305,6 +310,26 @@ def safe_mac_filename(mac_input):
     return re.sub(r"[^0-9A-Fa-f]", "_", mac_input.strip())
 
 
+def write_selected_category_summary(file_handle, selected_categories):
+    file_handle.write("SUMMARY:\n")
+
+    for category in selected_categories:
+        description = CATEGORY_SUMMARY.get(category, "")
+        if description:
+            file_handle.write(f"- {category}: {description}\n")
+        else:
+            file_handle.write(f"- {category}\n")
+
+    file_handle.write("\n")
+
+
+def remove_selected_category_files(output_dir, selected_categories):
+    for category in selected_categories:
+        category_file = os.path.join(output_dir, f"{category}.txt")
+        if os.path.exists(category_file):
+            os.remove(category_file)
+
+
 def main():
     print("==================================================")
     print("LOGPULL GREP ANALYZER")
@@ -384,6 +409,7 @@ def main():
     run_name = os.path.basename(log_dir)
     output_dir = os.path.join(OUTPUT_ROOT, run_name)
     os.makedirs(output_dir, exist_ok=True)
+    remove_selected_category_files(output_dir, selected_categories)
 
     your_problem_path = os.path.join(output_dir, "Your_Problem.txt")
 
@@ -391,21 +417,23 @@ def main():
         f.write("==================================================\n")
         f.write("YOUR PROBLEM FINDINGS\n")
         f.write("==================================================\n\n")
-        f.write("SELECTED CATEGORIES:\n")
-        f.write(", ".join(selected_categories) + "\n\n")
+        write_selected_category_summary(f, selected_categories)
 
     selected_findings_for_mac = []
+    created_category_files = []
 
     for category in CATEGORIES:
         pattern = PATTERNS[category]
         findings = run_grep_grouped(pattern, log_dir)
 
-        category_file = os.path.join(output_dir, f"{category}.txt")
-        write_category_file(category_file, category, pattern, findings)
-
         if category in selected_categories:
             append_to_your_problem(your_problem_path, category, findings)
             selected_findings_for_mac.append((category, findings))
+            continue
+
+        category_file = os.path.join(output_dir, f"{category}.txt")
+        write_category_file(category_file, category, pattern, findings)
+        created_category_files.append(category_file)
 
     mac_file_path = None
 
@@ -417,8 +445,7 @@ def main():
             f.write("==================================================\n")
             f.write(f"MAC FILTER: {mac_input}\n")
             f.write("==================================================\n\n")
-            f.write("SELECTED CATEGORIES:\n")
-            f.write(", ".join(selected_categories) + "\n\n")
+            write_selected_category_summary(f, selected_categories)
 
         for category, findings in selected_findings_for_mac:
             filtered = filter_grouped_findings_by_mac(findings, mac_input)
@@ -441,8 +468,8 @@ def main():
     print("Done.")
     print()
     print("Created files:")
-    for category in CATEGORIES:
-        print(f"  - {os.path.join(output_dir, category + '.txt')}")
+    for category_file in created_category_files:
+        print(f"  - {category_file}")
     print(f"  - {your_problem_path}")
 
     if mac_file_path:
