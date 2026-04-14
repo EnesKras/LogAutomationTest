@@ -3,6 +3,7 @@
 import os
 import subprocess
 import re
+from datetime import datetime
 
 SCRIPT_DIR = os.getcwd()
 OUTPUT_ROOT = os.path.join(SCRIPT_DIR, "Logpull_Findings")
@@ -323,12 +324,6 @@ def write_selected_category_summary(file_handle, selected_categories):
     file_handle.write("\n")
 
 
-def remove_selected_category_files(output_dir, selected_categories):
-    for category in selected_categories:
-        category_file = os.path.join(output_dir, f"{category}.txt")
-        if os.path.exists(category_file):
-            os.remove(category_file)
-
 
 def main():
     print("==================================================")
@@ -407,9 +402,9 @@ def main():
             use_mac_filter = True
 
     run_name = os.path.basename(log_dir)
-    output_dir = os.path.join(OUTPUT_ROOT, run_name)
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    output_dir = os.path.join(OUTPUT_ROOT, f"{run_name}_{timestamp}")
     os.makedirs(output_dir, exist_ok=True)
-    remove_selected_category_files(output_dir, selected_categories)
 
     your_problem_path = os.path.join(output_dir, "Your_Problem.txt")
 
