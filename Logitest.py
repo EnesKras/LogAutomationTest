@@ -3,6 +3,7 @@
 import os
 import subprocess
 import re
+from datetime import datetime
 
 SCRIPT_DIR = os.getcwd()
 OUTPUT_ROOT = os.path.join(SCRIPT_DIR, "Logpull_Findings")
@@ -52,8 +53,13 @@ CATEGORY_DISPLAY = {
     "12": ("HEALTHCHECK", "Internal health monitoring failures"),
 }
 
+CATEGORY_SUMMARY = {
+    category: description
+    for category, description in CATEGORY_DISPLAY.values()
+}
+
 PATTERNS = {
-    "WIFI_CLIENT": r"failed|CTRL-EVENT-(DISCONNECTED|SSID-TEMP-DISABLED|ASSOC-REJECT|AUTH-REJECT)|deauth(entication)?|disassoc(iation|iated)?|not associated|association rejected|auth(entication)? rejected|roam(ing)? failed|beacon loss|sa query timeout|pmksa.*fail|pmkid.*mismatch|eapol.*(timeout|failed)|client.*(disconnect(ed)?|deauth(entication)?|disassoc(iation|iated)?|auth(entication)? failed|assoc(iation)? failed|roam(ing)? failed)|sta.*(disconnect(ed)?|deauth(entication)?|disassoc(iation|iated)?|auth(entication)? failed|assoc(iation)? failed|roam(ing)? failed)|station.*(disconnect(ed)?|deauth(entication)?|disassoc(iation|iated)?|auth(entication)? failed|assoc(iation)? failed|roam(ing)? failed)|supplicant.*(disconnect(ed)?|deauth(entication)?|disassoc(iation|iated)?|auth(entication)? failed|assoc(iation)? failed|roam(ing)? failed)",
+    "WIFI_CLIENT": r"CTRL-EVENT-(DISCONNECTED|SSID-TEMP-DISABLED|ASSOC-REJECT|AUTH-REJECT)|deauth(entication)?|disassoc(iation|iated)?|not associated|association rejected|auth(entication)? rejected|roam(ing)? failed|beacon loss|sa query timeout|pmksa.*fail|pmkid.*mismatch|eapol.*(timeout|failed)|osw_sta_cqm: assoc: .*troubled changed: from=no to=yes: low_(rx_mbps|snr)|osw_sta_cqm: assoc: .*troubled=yes: low_(rx_mbps|snr)|osw_sta_cqm: assoc: .*troubled changed: from=yes: low_(rx_mbps|snr) to=no|client.*(disconnect(ed)?|deauth(entication)?|disassoc(iation|iated)?|auth(entication)? failed|assoc(iation)? failed|roam(ing)? failed)|sta.*(disconnect(ed)?|deauth(entication)?|disassoc(iation|iated)?|auth(entication)? failed|assoc(iation)? failed|roam(ing)? failed)|station.*(disconnect(ed)?|deauth(entication)?|disassoc(iation|iated)?|auth(entication)? failed|assoc(iation)? failed|roam(ing)? failed)|supplicant.*(disconnect(ed)?|deauth(entication)?|disassoc(iation|iated)?|auth(entication)? failed|assoc(iation)? failed|roam(ing)? failed)",
     "BACKHAUL": r"disconnect|disconnected",
     "BAND_STEERING": r"steer|steering|band steering|sticky client|btm|11v|11k|transition request|roam candidate",
     "WAN": r"Timeout waiting for PADO|PPPoE discovery failed|Unable to complete PPPoE Discovery|PAP peer authentication failed|PAP: Received Authentication NAK|CHAP authentication failed|Received Failure|LCP: timeout sending Config-Requests|No Echo Reply received|Serial link appears to be disconnected|Connection terminated|DHCP failed to obtain lease|udhcpc: no lease|sending discover|DNS resolution failed|dns.*fail|dns.*timeout|lease lost, entering rebind state|reconnecting PPPoE",
@@ -62,7 +68,7 @@ PATTERNS = {
     "SECURITY": r"auth|authentication|authorize|authorization|login|logout|signin|sign[- ]in|session|token|password|passwd|credential|secret|keychain|mfa|2fa|two[- ]factor|otp|totp|hotp|sms code|push notification|sso|saml|idp|sp-initiated|idp-initiated|oauth|oidc|openid connect|bearer|AuthenticationServiceException|AuthenticationProvider|HttpAuthenticator|SecurityServerClientImpl|XFireFault|SocketTimeoutException|Read timed out|access denied|permission denied|not authorized|unauthorized|forbidden|insufficient permission|policy violation|account lock|locked out|too many attempts|rate limit|brute[- ]force|suspicious|anomalous login|ip block|throttle|tls|ssl|handshake|certificate|cert|x509|truststore|keystore|cipher|encryption|decryption|fail|failed|denied|error|invalid|expired|timeout|unauthorized|forbidden|mismatch|revoked|untrusted|unknown ca|signature|issuer|audience",
     "RADIO": r"temperature high|thermal throttling|thermal protection|therm_state:[234]|radio disabled - thermal emergency|shutting down wifi[0-9] for thermal protection|DFS-RADAR-DETECTED|Radar detected on channel|Radar pulse detected|channel utilization high|considering channel change|reducing channel width from .* to .*|secondary channel interference|Tx excessive retries|Rx invalid nwid|Missed beacon",
     "DPI_FLOW": r"flow classification failed|category=unknown|no SNI|flow table 80% full|flow table 90% full|flow table full, dropping new flows|fsm.*segfault|process fsm .* died unexpectedly|restarting fsm|nf_conntrack: table full, dropping packet|nfqueue drops detected|queue_dropped",
-    "DRIVER": r"probe failed with error|failed to init core|firmware boot timeout|failed to boot firmware|failed to load firmware|Direct firmware load .* failed( with error -?[0-9]+)?|firmware version mismatch|signature verification failed|WMI command.*timeout|wmi_timeout_work|driver command timeout|Firmware ASSERT|FATAL: Firmware assert|firmware crash detected|crash dump collected|initiating SSR|scan failed|Failed to get scan results|Invalid station info|Invalid peer mac address|scan abort failed|set.*(key|beacon|channel|tx queue|wiphy|interface).*(failed|error)|bss.*not up|vap.*(create|delete|up|down).*(failed|error)|rekey.*(failed|error)|gtk.*(failed|error)|(dhd|wl|ath11k|ath10k|ath|qcacld|qca|mt76|mt7915|iwlwifi).*(error|failed|warn(ing)?|assert(ion)?|crash(ed)?)",
+    "DRIVER": r"probe failed with error|failed to init core|firmware boot timeout|failed to boot firmware|failed to load firmware|Direct firmware load .* failed( with error -?[0-9]+)?|firmware version mismatch|signature verification failed|WMI command.*timeout|wmi_timeout_work|driver command timeout|Firmware ASSERT|FATAL: Firmware assert|firmware crash detected|crash dump collected|initiating SSR|scan failed|Failed to get scan results|Invalid station info|Invalid peer mac address|scan abort failed|set.*(key|beacon|channel|tx queue|wiphy|interface).*(failed|error)|bss.*not up|vap.*(create|delete|up|down).*(failed|error)|rekey.*(failed|error)|gtk.*(failed|error)|osw: drv: nl80211: hostap: scheduling configuration task|osw: drv: nl80211: hostap: configuration task complete|osw: drv: nl80211/.+: acl: (adding|removing)|osw: drv: nl80211.*(fail|failed|error|timeout)|wlan: \[[^]]*:(E|W):[^]]*\].*|(dhd|wl|ath11k|ath10k|ath|qcacld|qca|mt76|mt7915|iwlwifi).*(error|failed|warn(ing)?|assert(ion)?|crash(ed)?)",
     "OVSDB": r"ovsdb|config apply failed|transaction failed|schema mismatch|monitor cancelled|jsonrpc|database connection lost|ovsdb-server|ovsdb-client",
     "HEALTHCHECK": r"healthcheck|health check|selftest failed|self-test failed|sanity check failed|periodic check failed|monitor check failed",
 }
@@ -305,6 +311,20 @@ def safe_mac_filename(mac_input):
     return re.sub(r"[^0-9A-Fa-f]", "_", mac_input.strip())
 
 
+def write_selected_category_summary(file_handle, selected_categories):
+    file_handle.write("SUMMARY:\n")
+
+    for category in selected_categories:
+        description = CATEGORY_SUMMARY.get(category, "")
+        if description:
+            file_handle.write(f"- {category}: {description}\n")
+        else:
+            file_handle.write(f"- {category}\n")
+
+    file_handle.write("\n")
+
+
+
 def main():
     print("==================================================")
     print("LOGPULL GREP ANALYZER")
@@ -382,7 +402,8 @@ def main():
             use_mac_filter = True
 
     run_name = os.path.basename(log_dir)
-    output_dir = os.path.join(OUTPUT_ROOT, run_name)
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    output_dir = os.path.join(OUTPUT_ROOT, f"{run_name}_{timestamp}")
     os.makedirs(output_dir, exist_ok=True)
 
     your_problem_path = os.path.join(output_dir, "Your_Problem.txt")
@@ -391,21 +412,23 @@ def main():
         f.write("==================================================\n")
         f.write("YOUR PROBLEM FINDINGS\n")
         f.write("==================================================\n\n")
-        f.write("SELECTED CATEGORIES:\n")
-        f.write(", ".join(selected_categories) + "\n\n")
+        write_selected_category_summary(f, selected_categories)
 
     selected_findings_for_mac = []
+    created_category_files = []
 
     for category in CATEGORIES:
         pattern = PATTERNS[category]
         findings = run_grep_grouped(pattern, log_dir)
 
-        category_file = os.path.join(output_dir, f"{category}.txt")
-        write_category_file(category_file, category, pattern, findings)
-
         if category in selected_categories:
             append_to_your_problem(your_problem_path, category, findings)
             selected_findings_for_mac.append((category, findings))
+            continue
+
+        category_file = os.path.join(output_dir, f"{category}.txt")
+        write_category_file(category_file, category, pattern, findings)
+        created_category_files.append(category_file)
 
     mac_file_path = None
 
@@ -417,8 +440,7 @@ def main():
             f.write("==================================================\n")
             f.write(f"MAC FILTER: {mac_input}\n")
             f.write("==================================================\n\n")
-            f.write("SELECTED CATEGORIES:\n")
-            f.write(", ".join(selected_categories) + "\n\n")
+            write_selected_category_summary(f, selected_categories)
 
         for category, findings in selected_findings_for_mac:
             filtered = filter_grouped_findings_by_mac(findings, mac_input)
@@ -441,8 +463,8 @@ def main():
     print("Done.")
     print()
     print("Created files:")
-    for category in CATEGORIES:
-        print(f"  - {os.path.join(output_dir, category + '.txt')}")
+    for category_file in created_category_files:
+        print(f"  - {category_file}")
     print(f"  - {your_problem_path}")
 
     if mac_file_path:
